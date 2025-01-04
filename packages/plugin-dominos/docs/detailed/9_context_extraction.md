@@ -287,3 +287,182 @@ const enhancedTemplate = `
     User preferences: {{preferences}}
 `;
 ```
+
+## Schema and Type Inference Deep Dive
+
+### Schema-Based Generation
+```typescript
+const orderDetails = (await generateObjectV2({
+    runtime,
+    context,
+    modelClass: ModelClass.LARGE,
+    schema: PizzaOrderSchema,
+})) as z.infer<typeof PizzaOrderSchema>;
+```
+
+#### How Schema Helps Create orderDetails
+
+```mermaid
+graph TD
+    A[User Input] --> B[LLM Processing]
+    B --> C[Raw JSON Output]
+    C --> D[Schema Validation]
+    D --> E[Typed Object]
+    
+    subgraph "Schema Validation"
+        D1[Check Types] --> D2[Validate Enums]
+        D2 --> D3[Verify Constraints]
+        D3 --> D4[Apply Defaults]
+    end
+```
+
+1. **Schema as Contract**
+   ```typescript
+   const PizzaOrderSchema = z.object({
+       size: z.enum(["SMALL", "MEDIUM", "LARGE", "XLARGE"]),
+       // ...
+   });
+   ```
+   - Defines expected structure
+   - Specifies valid values
+   - Sets type constraints
+   - Declares optional fields
+
+2. **Generation Process**
+   ```mermaid
+   sequenceDiagram
+       participant U as User Input
+       participant L as LLM
+       participant S as Schema
+       participant V as Validator
+       participant O as Output
+       
+       U->>L: Natural Language
+       L->>S: Raw JSON
+       S->>V: Validate Structure
+       V->>O: Typed Object
+   ```
+
+3. **Validation Flow**
+   - LLM generates JSON matching schema
+   - Schema validates structure
+   - Invalid data throws errors
+   - Valid data becomes typed
+
+### Type Inference with z.infer
+
+```typescript
+type PizzaOrder = z.infer<typeof PizzaOrderSchema>;
+```
+
+#### Understanding z.infer
+
+```mermaid
+graph LR
+    A[Zod Schema] -->|Type Inference| B[TypeScript Type]
+    B -->|Runtime Validation| C[Validated Object]
+    
+    subgraph "Type Generation"
+        D[Schema Definition] --> E[Inferred Type]
+        E --> F[Type Checking]
+    end
+```
+
+1. **Type Extraction**
+   ```typescript
+   // Schema definition
+   const PizzaOrderSchema = z.object({...});
+   
+   // Inferred type
+   type PizzaOrder = {
+       size: "SMALL" | "MEDIUM" | "LARGE" | "XLARGE";
+       crust: "HAND_TOSSED" | "THIN" | "PAN" | "GLUTEN_FREE" | "BROOKLYN";
+       toppings?: {
+           code: string;
+           portion: "LEFT" | "RIGHT" | "ALL";
+           amount: 1 | 2;
+       }[];
+       quantity: number;
+       specialInstructions?: string;
+   };
+   ```
+
+2. **Type Safety Benefits**
+   ```typescript
+   // Type checking ensures:
+   const order: PizzaOrder = {
+       size: "HUGE",     // Error: Invalid size
+       crust: "CRISPY",  // Error: Invalid crust
+       quantity: "2"     // Error: Must be number
+   };
+   ```
+
+3. **Runtime Validation**
+   ```typescript
+   try {
+       const validOrder = PizzaOrderSchema.parse({
+           size: "LARGE",
+           crust: "HAND_TOSSED",
+           quantity: 1
+       });
+       // validOrder is typed as PizzaOrder
+   } catch (error) {
+       // Validation failed
+   }
+   ```
+
+### Schema to Type Pipeline
+
+```mermaid
+graph TD
+    A[Zod Schema] -->|Define Structure| B[Runtime Validation]
+    A -->|Type Inference| C[TypeScript Types]
+    B -->|Valid Data| D[Typed Object]
+    C -->|Type Checking| D
+    
+    subgraph "Development Time"
+        C
+    end
+    
+    subgraph "Runtime"
+        B
+        D
+    end
+```
+
+1. **Development Benefits**
+   - Autocomplete support
+   - Type checking
+   - Error prevention
+   - Documentation
+
+2. **Runtime Benefits**
+   - Data validation
+   - Error handling
+   - Type guarantees
+   - Safe type casting
+
+3. **Integration Example**
+   ```typescript
+   // Development time type checking
+   const processOrder = (order: PizzaOrder) => {
+       // TypeScript knows all possible values
+       if (order.size === "LARGE") {
+           // ...
+       }
+   };
+
+   // Runtime validation
+   const handleOrder = async (input: unknown) => {
+       const order = await PizzaOrderSchema.parseAsync(input);
+       // order is now typed as PizzaOrder
+       processOrder(order);
+   };
+   ```
+
+This schema-based approach provides:
+1. Runtime type safety
+2. Development-time type checking
+3. Automatic type inference
+4. Data validation
+5. Error handling
